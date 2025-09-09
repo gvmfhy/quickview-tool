@@ -176,6 +176,50 @@ class QuickViewServer {
       const files = this.getFileTree(this.watchDir);
       res.json(files);
     });
+
+    // API to format code files
+    this.app.post('/api/format', (req, res) => {
+      const { filepath, extension } = req.body;
+      
+      if (!filepath || !extension) {
+        return res.status(400).json({ success: false, error: 'Missing filepath or extension' });
+      }
+      
+      const fullPath = path.join(this.watchDir, filepath);
+      
+      try {
+        // Read current file content
+        const content = fs.readFileSync(fullPath, 'utf8');
+        let formattedContent;
+        
+        // Format based on file type
+        switch (extension) {
+          case '.js':
+          case '.jsx':
+            formattedContent = this.formatJavaScript(content);
+            break;
+          case '.json':
+            formattedContent = this.formatJSON(content);
+            break;
+          case '.html':
+            formattedContent = this.formatHTML(content);
+            break;
+          case '.css':
+            formattedContent = this.formatCSS(content);
+            break;
+          default:
+            return res.status(400).json({ success: false, error: 'File type not supported for formatting' });
+        }
+        
+        // Write formatted content back to file
+        fs.writeFileSync(fullPath, formattedContent, 'utf8');
+        
+        res.json({ success: true, message: 'File formatted successfully' });
+        
+      } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
   }
 
   setupSocketHandlers() {
@@ -266,6 +310,85 @@ class QuickViewServer {
       if (a.type === b.type) return a.name.localeCompare(b.name);
       return a.type === 'directory' ? -1 : 1;
     });
+  }
+
+  // Formatting methods
+  formatJavaScript(content) {
+    // Basic JavaScript/JSX formatting
+    let formatted = content
+      // Add spacing around operators
+      .replace(/([^=!<>])=([^=])/g, '$1 = $2')
+      .replace(/([^=!<>])==([^=])/g, '$1 == $2')
+      .replace(/([^=!<>])===([^=])/g, '$1 === $2')
+      // Add spacing around braces
+      .replace(/\{([^\s])/g, '{ $1')
+      .replace(/([^\s])\}/g, '$1 }')
+      // Fix indentation (basic)
+      .split('\n')
+      .map(line => line.trim())
+      .map((line, i, arr) => {
+        let indent = 0;
+        for (let j = 0; j < i; j++) {
+          const prevLine = arr[j];
+          if (prevLine.includes('{')) indent += 2;
+          if (prevLine.includes('}')) indent -= 2;
+        }
+        if (line.includes('}')) indent -= 2;
+        return ' '.repeat(Math.max(0, indent)) + line;
+      })
+      .join('\n');
+    
+    return formatted;
+  }
+
+  formatJSON(content) {
+    try {
+      const parsed = JSON.parse(content);
+      return JSON.stringify(parsed, null, 2);
+    } catch (error) {
+      throw new Error('Invalid JSON content');
+    }
+  }
+
+  formatHTML(content) {
+    // Basic HTML formatting
+    let formatted = content
+      // Add newlines after tags
+      .replace(/></g, '>\n<')
+      // Fix indentation
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      .map((line, i, arr) => {
+        let indent = 0;
+        for (let j = 0; j < i; j++) {
+          const prevLine = arr[j];
+          if (prevLine.match(/<[^\/][^>]*[^\/]>/)) indent += 2;
+          if (prevLine.match(/<\/[^>]*>/)) indent -= 2;
+        }
+        if (line.match(/<\/[^>]*>/)) indent -= 2;
+        return ' '.repeat(Math.max(0, indent)) + line;
+      })
+      .join('\n');
+    
+    return formatted;
+  }
+
+  formatCSS(content) {
+    // Basic CSS formatting
+    let formatted = content
+      // Add spacing around braces
+      .replace(/\{/g, ' {\n  ')
+      .replace(/\}/g, '\n}\n')
+      // Add spacing after colons
+      .replace(/:\s*([^;]+);/g, ': $1;')
+      // Add newlines after semicolons
+      .replace(/;\s*([^}])/g, ';\n  $1')
+      // Clean up multiple newlines
+      .replace(/\n\s*\n/g, '\n')
+      .trim();
+    
+    return formatted;
   }
 
   start() {

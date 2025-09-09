@@ -400,9 +400,49 @@ class QuickViewApp {
         }
     }
 
-    formatCode() {
-        // Placeholder for code formatting
-        console.log('Format code functionality would be implemented here');
+    async formatCode() {
+        if (!this.currentFile) return;
+        
+        this.showLoading(true);
+        
+        try {
+            const response = await fetch(`/api/format`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    filepath: this.currentFile.path,
+                    extension: this.currentFile.extension
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                // Reload the file to show formatted content
+                this.loadFile(this.currentFile);
+                
+                // Show success message briefly
+                const formatBtn = document.getElementById('format-code');
+                const originalText = formatBtn.textContent;
+                formatBtn.textContent = '✓ Formatted';
+                formatBtn.style.background = '#10b981';
+                
+                setTimeout(() => {
+                    formatBtn.textContent = originalText;
+                    formatBtn.style.background = '';
+                }, 2000);
+            } else {
+                this.showError('Failed to format code: ' + result.error);
+            }
+            
+        } catch (error) {
+            console.error('Error formatting code:', error);
+            this.showError('Failed to format code: ' + error.message);
+        } finally {
+            this.showLoading(false);
+        }
     }
 
     openExternal() {
